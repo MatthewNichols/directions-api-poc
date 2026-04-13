@@ -38,6 +38,7 @@ const form = reactive({
 
 const mapElement = ref(null);
 const isApplyingRouteState = ref(false);
+const isMapExpanded = ref(false);
 
 let routeUpdateTimeout;
 
@@ -348,6 +349,21 @@ function updateMap() {
   map.fitBounds(combinedBounds, { padding: [40, 40] });
 }
 
+function syncMapSize() {
+  if (!map) {
+    return;
+  }
+
+  requestAnimationFrame(() => {
+    map.invalidateSize();
+    updateMap();
+  });
+}
+
+function toggleMapExpanded() {
+  isMapExpanded.value = !isMapExpanded.value;
+}
+
 onMounted(() => {
   map = L.map(mapElement.value, {
     zoomControl: true,
@@ -375,6 +391,7 @@ onBeforeUnmount(() => {
 
 watch(validLocations, updateMap, { deep: true });
 watch(() => form.distanceIncrementMeters, updateMap);
+watch(isMapExpanded, syncMapSize);
 
 watch(
   () => route.query.state,
@@ -491,15 +508,20 @@ watch(
         <button class="primary-button add-location-button" type="button" @click="addLocation">Add location</button>
       </form>
 
-      <section class="map-panel">
+      <section :class="['map-panel', { 'map-panel-expanded': isMapExpanded }]">
         <div class="map-panel-header">
           <div>
             <p class="result-label">Relative map</p>
             <h2>Primary-centered view with distance rings</h2>
           </div>
-          <p class="map-status">
-            {{ primaryLocation ? `${relativeLocations.length} relative location${relativeLocations.length === 1 ? '' : 's'} shown around ${primaryLocation.name}.` : 'Enter a valid primary location to start the map.' }}
-          </p>
+          <div class="map-panel-actions">
+            <p class="map-status">
+              {{ primaryLocation ? `${relativeLocations.length} relative location${relativeLocations.length === 1 ? '' : 's'} shown around ${primaryLocation.name}.` : 'Enter a valid primary location to start the map.' }}
+            </p>
+            <button class="ghost-button compact-button" type="button" @click="toggleMapExpanded">
+              {{ isMapExpanded ? 'Exit full window' : 'Full window map' }}
+            </button>
+          </div>
         </div>
         <div ref="mapElement" class="map-canvas" aria-label="Map showing the primary location, relative locations, and distance rings"></div>
       </section>
