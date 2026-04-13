@@ -1,12 +1,17 @@
 import cors from 'cors';
 import dotenv from 'dotenv';
 import express from 'express';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 dotenv.config();
 
 const app = express();
 const port = Number(process.env.PORT || 3001);
 const orsApiKey = process.env.ORS_API_KEY;
+const currentFilePath = fileURLToPath(import.meta.url);
+const currentDirectory = path.dirname(currentFilePath);
+const clientDistPath = path.resolve(currentDirectory, '../../client/dist');
 
 app.use(cors());
 app.use(express.json());
@@ -107,6 +112,21 @@ app.post('/api/route-time', async (request, response) => {
       details: error instanceof Error ? error.message : 'Unknown error'
     });
   }
+});
+
+app.use(express.static(clientDistPath));
+
+app.get('*', (request, response, next) => {
+  if (request.path.startsWith('/api/')) {
+    next();
+    return;
+  }
+
+  response.sendFile(path.join(clientDistPath, 'index.html'), (error) => {
+    if (error) {
+      next();
+    }
+  });
 });
 
 app.listen(port, () => {

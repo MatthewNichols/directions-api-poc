@@ -54,3 +54,65 @@ Successful responses look like:
   "distanceMeters": 5800.2
 }
 ```
+
+## Docker / Coolify
+
+This repo can be deployed to Coolify with either the root `Dockerfile` or the root `docker-compose.yml`.
+
+### What the container does
+
+- Builds the Vue frontend from `client/`
+- Runs the Express backend from `server/`
+- Serves the built frontend from the same Express process
+
+### Local Docker test
+
+Build the image:
+
+```bash
+docker build -t directions-api-poc .
+```
+
+Run it with your ORS key:
+
+```bash
+docker run --rm -p 3001:3001 -e ORS_API_KEY=your_key_here directions-api-poc
+```
+
+Then open `http://localhost:3001`
+
+### Local Docker Compose test
+
+Run the stack with:
+
+```bash
+ORS_API_KEY=your_key_here docker compose up --build
+```
+
+Then open `http://localhost:3001`
+
+### Coolify setup
+
+If you use the Dockerfile flow in Coolify, use these settings:
+
+- Build Pack: `Dockerfile`
+- Dockerfile Location: `./Dockerfile`
+- Port: `3001`
+- Health Check Path: `/api/health`
+
+If you use the Docker Compose flow in Coolify:
+
+- Compose File: `./docker-compose.yml`
+- Service: `directions-api-poc`
+- Port: `3001`
+- Health Check Path: `/api/health`
+
+Add this environment variable in Coolify:
+
+- `ORS_API_KEY=your_openrouteservice_key`
+
+Optional environment variable:
+
+- `PORT=3001`
+
+Coolify can expose the app on your chosen domain or generated URL. The frontend and API will both be served from the same container, so no extra reverse proxy setup is required.
