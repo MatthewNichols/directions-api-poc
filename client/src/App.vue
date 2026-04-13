@@ -18,6 +18,84 @@ const mapElement = ref(null);
 let map;
 let mapFeatures;
 
+function normalizeCoordinateSegment(value) {
+  return value.trim();
+}
+
+function extractCoordinatePair(value) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmedValue = value.trim();
+
+  if (!trimmedValue) {
+    return null;
+  }
+
+  const normalizedValue = trimmedValue.replace(/\s*([,\\/])\s*/g, '$1').replace(/\s+/g, ' ');
+  const segments = normalizedValue.split(/[,\\/ ]/).map(normalizeCoordinateSegment).filter(Boolean);
+
+  if (segments.length !== 2) {
+    return null;
+  }
+
+  const latitude = parseCoordinate(segments[0]);
+  const longitude = parseCoordinate(segments[1]);
+
+  if (latitude === null || longitude === null) {
+    return null;
+  }
+
+  return {
+    latitude: segments[0],
+    longitude: segments[1]
+  };
+}
+
+function applyCoordinatePair(prefix, rawValue) {
+  const coordinatePair = extractCoordinatePair(rawValue);
+
+  if (!coordinatePair) {
+    return false;
+  }
+
+  if (prefix === 'start') {
+    form.startLatitude = coordinatePair.latitude;
+    form.startLongitude = coordinatePair.longitude;
+  } else {
+    form.endLatitude = coordinatePair.latitude;
+    form.endLongitude = coordinatePair.longitude;
+  }
+
+  return true;
+}
+
+function handleLatitudePaste(prefix, event) {
+  const pastedText = event.clipboardData?.getData('text') ?? '';
+
+  if (!applyCoordinatePair(prefix, pastedText)) {
+    return;
+  }
+
+  event.preventDefault();
+}
+
+function handleLatitudeInput(prefix, event) {
+  const nextValue = event.target.value;
+
+  if (applyCoordinatePair(prefix, nextValue)) {
+    return;
+  }
+
+  if (prefix === 'start') {
+    form.startLatitude = nextValue;
+    return;
+  }
+
+  form.endLatitude = nextValue;
+}
+
 function parseCoordinate(value) {
   const numericValue = Number(value);
 
@@ -201,7 +279,16 @@ function setExample() {
           <h2>Start</h2>
           <label>
             <span>Latitude</span>
-            <input v-model="form.startLatitude" type="number" step="any" placeholder="42.3601" required />
+            <input
+              :value="form.startLatitude"
+              type="text"
+              inputmode="decimal"
+              placeholder="42.3601 or 42.3601,-71.0589"
+              required
+              @input="handleLatitudeInput('start', $event)"
+              @paste="handleLatitudePaste('start', $event)"
+            />
+            <small class="input-hint">Paste `lat,long`, `lat/long`, `lat\long`, or `lat long` to fill both fields.</small>
           </label>
           <label>
             <span>Longitude</span>
@@ -213,7 +300,16 @@ function setExample() {
           <h2>End</h2>
           <label>
             <span>Latitude</span>
-            <input v-model="form.endLatitude" type="number" step="any" placeholder="42.3736" required />
+            <input
+              :value="form.endLatitude"
+              type="text"
+              inputmode="decimal"
+              placeholder="42.3736 or 42.3736,-71.1097"
+              required
+              @input="handleLatitudeInput('end', $event)"
+              @paste="handleLatitudePaste('end', $event)"
+            />
+            <small class="input-hint">Paste `lat,long`, `lat/long`, `lat\long`, or `lat long` to fill both fields.</small>
           </label>
           <label>
             <span>Longitude</span>
