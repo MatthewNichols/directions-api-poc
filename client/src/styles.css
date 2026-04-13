@@ -225,6 +225,18 @@ h1 {
   justify-self: start;
 }
 
+.form-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
+}
+
+.form-action-row .ghost-button,
+.form-action-row .primary-button {
+  margin-top: 0;
+}
+
 .map-panel {
   margin-top: 2rem;
   padding: 1rem;
@@ -241,6 +253,10 @@ h1 {
   background: rgba(8, 15, 30, 0.95);
   border: 1px solid rgba(245, 239, 230, 0.14);
   box-shadow: 0 24px 80px rgba(4, 10, 20, 0.5);
+}
+
+.map-panel-tall .map-canvas {
+  min-height: 75vh;
 }
 
 .map-panel-header {

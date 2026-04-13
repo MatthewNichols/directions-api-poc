@@ -43,6 +43,7 @@ const form = reactive({
 const mapElement = ref(null);
 const isApplyingRouteState = ref(false);
 const isMapExpanded = ref(false);
+const isFormVisible = ref(true);
 
 let routeUpdateTimeout;
 
@@ -408,6 +409,10 @@ function toggleMapExpanded() {
   isMapExpanded.value = !isMapExpanded.value;
 }
 
+function toggleFormVisible() {
+  isFormVisible.value = !isFormVisible.value;
+}
+
 onMounted(() => {
   map = L.map(mapElement.value, {
     zoomControl: true,
@@ -437,6 +442,7 @@ watch(validLocations, updateMap, { deep: true });
 watch(() => form.distanceIncrementMeters, updateMap);
 watch(() => [form.ringColors.odd, form.ringColors.even], updateMap);
 watch(isMapExpanded, syncMapSize);
+watch(isFormVisible, syncMapSize);
 
 watch(
   () => route.query.state,
@@ -490,7 +496,9 @@ watch(
       </p>
 
       <div class="relative-distance-toolbar">
-        <button class="ghost-button" type="button" @click="setExample">Load example locations</button>
+        <button class="ghost-button" type="button" @click="toggleFormVisible">
+          {{ isFormVisible ? 'Hide location form' : 'Show location form' }}
+        </button>
 
         <label class="select-field">
           <span>Distance ring increment</span>
@@ -514,7 +522,7 @@ watch(
 
       <p class="input-hint share-hint">This page saves its locations and ring size in the URL and local storage so the demo can be reloaded or shared.</p>
 
-      <form class="relative-distance-form" @submit.prevent>
+      <form v-if="isFormVisible" class="relative-distance-form" @submit.prevent>
         <section
           v-for="(location, index) in form.locations"
           :key="location.id"
@@ -560,10 +568,13 @@ watch(
           </label>
         </section>
 
-        <button class="primary-button add-location-button" type="button" @click="addLocation">Add location</button>
+        <div class="form-action-row">
+          <button class="ghost-button" type="button" @click="setExample">Load example locations</button>
+          <button class="primary-button add-location-button" type="button" @click="addLocation">Add location</button>
+        </div>
       </form>
 
-      <section :class="['map-panel', { 'map-panel-expanded': isMapExpanded }]">
+      <section :class="['map-panel', { 'map-panel-expanded': isMapExpanded, 'map-panel-tall': !isFormVisible && !isMapExpanded }]">
         <div class="map-panel-header">
           <div>
             <p class="result-label">Relative map</p>
