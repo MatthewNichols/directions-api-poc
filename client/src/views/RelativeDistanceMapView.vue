@@ -276,18 +276,6 @@ function updateMap() {
   }
 
   const primaryPoint = [primary.latitude, primary.longitude];
-
-function coercePersistedCoordinate(value) {
-  if (typeof value === 'string') {
-    return value;
-  }
-
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return String(value);
-  }
-
-  return '';
-}
   const bounds = [primaryPoint];
 
   L.circleMarker(primaryPoint, {
@@ -305,18 +293,22 @@ function coercePersistedCoordinate(value) {
     return Math.max(furthestDistance, getDistanceInMeters(primary, location));
   }, increment * 3);
   const circleCount = Math.max(1, Math.ceil(maxDistance / increment));
+  const outerRingRadius = increment * circleCount;
+  const outerRingBounds = L.latLng(primary.latitude, primary.longitude).toBounds(outerRingRadius * 2);
 
   for (let index = 1; index <= circleCount; index += 1) {
     const radius = increment * index;
 
     L.circle(primaryPoint, {
       radius,
-      color: '#8ecae6',
-      opacity: 0.35,
-      weight: 1,
-      fillOpacity: 0.03
+      color: index === circleCount ? '#f7c873' : '#8ecae6',
+      opacity: index === circleCount ? 0.75 : 0.6,
+      weight: index === circleCount ? 2.5 : 2,
+      dashArray: index === circleCount ? '12 8' : '6 6',
+      fillColor: '#8ecae6',
+      fillOpacity: 0.02
     })
-      .bindTooltip(formatDistance(radius), { permanent: false, direction: 'right' })
+      .bindTooltip(formatDistance(radius), { permanent: index === circleCount, direction: 'right' })
       .addTo(mapFeatures);
   }
 
@@ -346,11 +338,14 @@ function coercePersistedCoordinate(value) {
   });
 
   if (bounds.length === 1) {
-    map.setView(primaryPoint, 11);
+    map.fitBounds(outerRingBounds, { padding: [40, 40] });
     return;
   }
 
-  map.fitBounds(bounds, { padding: [40, 40] });
+  const combinedBounds = L.latLngBounds(bounds);
+
+  combinedBounds.extend(outerRingBounds);
+  map.fitBounds(combinedBounds, { padding: [40, 40] });
 }
 
 onMounted(() => {
