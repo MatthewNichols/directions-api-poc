@@ -192,6 +192,19 @@ h1 {
   min-width: 240px;
 }
 
+.color-field {
+  min-width: 180px;
+}
+
+.color-input {
+  width: 100%;
+  min-height: 3rem;
+  padding: 0.35rem;
+  border: 1px solid rgba(247, 200, 115, 0.18);
+  border-radius: 16px;
+  background: rgba(10, 18, 34, 0.75);
+}
+
 .location-card {
   gap: 1rem;
 }

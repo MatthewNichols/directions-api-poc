@@ -20,6 +20,10 @@ const distanceOptions = [
 
 const form = reactive({
   distanceIncrementMeters: 5000,
+  ringColors: {
+    odd: '#8ecae699',
+    even: '#f7c873bf'
+  },
   locations: [
     {
       id: 1,
@@ -66,6 +70,10 @@ function ensureMinimumLocations() {
 function serializeFormState() {
   return JSON.stringify({
     distanceIncrementMeters: form.distanceIncrementMeters,
+    ringColors: {
+      odd: form.ringColors.odd,
+      even: form.ringColors.even
+    },
     locations: form.locations.map((location) => ({
       name: location.name,
       latitude: location.latitude,
@@ -86,6 +94,8 @@ function applySerializedState(serializedState) {
     const incrementExists = distanceOptions.some((option) => option.value === parsedState.distanceIncrementMeters);
 
     form.distanceIncrementMeters = incrementExists ? parsedState.distanceIncrementMeters : 5000;
+    form.ringColors.odd = coercePersistedColor(parsedState.ringColors?.odd, '#8ecae699');
+    form.ringColors.even = coercePersistedColor(parsedState.ringColors?.even, '#f7c873bf');
     form.locations = parsedLocations.map((location, index) => {
       return createLocation(
         typeof location?.name === 'string' ? location.name : index === 0 ? 'Primary location' : `Relative location ${index}`,
@@ -125,6 +135,36 @@ function coercePersistedCoordinate(value) {
   }
 
   return '';
+}
+
+function coercePersistedColor(value, fallback) {
+  if (typeof value !== 'string') {
+    return fallback;
+  }
+
+  const normalizedValue = value.trim();
+
+  if (/^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(normalizedValue)) {
+    return normalizedValue;
+  }
+
+  return fallback;
+}
+
+function parseRingColor(value, fallback) {
+  const normalizedValue = coercePersistedColor(value, fallback);
+
+  if (normalizedValue.length === 9) {
+    return {
+      color: normalizedValue.slice(0, 7),
+      opacity: Number((parseInt(normalizedValue.slice(7, 9), 16) / 255).toFixed(2))
+    };
+  }
+
+  return {
+    color: normalizedValue,
+    opacity: 1
+  };
 }
 
 function normalizeCoordinateSegment(value) {
@@ -296,18 +336,22 @@ function updateMap() {
   const circleCount = Math.max(1, Math.ceil(maxDistance / increment));
   const outerRingRadius = increment * circleCount;
   const outerRingBounds = L.latLng(primary.latitude, primary.longitude).toBounds(outerRingRadius * 2);
+  const oddRingStyle = parseRingColor(form.ringColors.odd, '#8ecae699');
+  const evenRingStyle = parseRingColor(form.ringColors.even, '#f7c873bf');
 
+  // Draw rings out to the furthest relative location, or at least 3 rings to give a sense of scale.
   for (let index = 1; index <= circleCount; index += 1) {
     const radius = increment * index;
+    const ringStyle = index % 2 === 0 ? evenRingStyle : oddRingStyle;
 
     L.circle(primaryPoint, {
       radius,
-      color: index === circleCount ? '#f7c873' : '#8ecae6',
-      opacity: index === circleCount ? 0.75 : 0.6,
+      color: ringStyle.color,
+      opacity: ringStyle.opacity,
       weight: index === circleCount ? 2.5 : 2,
       dashArray: index === circleCount ? '12 8' : '6 6',
-      fillColor: '#8ecae6',
-      fillOpacity: 0.02
+      fillColor: ringStyle.color,
+      fillOpacity: 0
     })
       .bindTooltip(formatDistance(radius), { permanent: index === circleCount, direction: 'right' })
       .addTo(mapFeatures);
@@ -391,6 +435,7 @@ onBeforeUnmount(() => {
 
 watch(validLocations, updateMap, { deep: true });
 watch(() => form.distanceIncrementMeters, updateMap);
+watch(() => [form.ringColors.odd, form.ringColors.even], updateMap);
 watch(isMapExpanded, syncMapSize);
 
 watch(
@@ -454,6 +499,16 @@ watch(
               {{ option.label }}
             </option>
           </select>
+        </label>
+
+        <label class="color-field">
+          <span>Odd ring color</span>
+          <input v-model="form.ringColors.odd" class="color-input" type="color" alpha />
+        </label>
+
+        <label class="color-field">
+          <span>Even ring color</span>
+          <input v-model="form.ringColors.even" class="color-input" type="color" alpha />
         </label>
       </div>
 
