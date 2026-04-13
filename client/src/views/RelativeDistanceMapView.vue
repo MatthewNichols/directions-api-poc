@@ -2,8 +2,13 @@
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 
 let nextLocationId = 3;
+const storageKey = 'relative-distance-map-state';
+
+const route = useRoute();
+const router = useRouter();
 
 const distanceOptions = [
   { label: '1 km rings', value: 1000 },
@@ -32,9 +37,94 @@ const form = reactive({
 });
 
 const mapElement = ref(null);
+const isApplyingRouteState = ref(false);
+
+let routeUpdateTimeout;
 
 let map;
 let mapFeatures;
+
+function createLocation(name = '', latitude = '', longitude = '') {
+  const location = {
+    id: nextLocationId,
+    name,
+    latitude,
+    longitude
+  };
+
+  nextLocationId += 1;
+  return location;
+}
+
+function ensureMinimumLocations() {
+  while (form.locations.length < 2) {
+    form.locations.push(createLocation(`Relative location ${form.locations.length}`));
+  }
+}
+
+function serializeFormState() {
+  return JSON.stringify({
+    distanceIncrementMeters: form.distanceIncrementMeters,
+    locations: form.locations.map((location) => ({
+      name: location.name,
+      latitude: location.latitude,
+      longitude: location.longitude
+    }))
+  });
+}
+
+function applySerializedState(serializedState) {
+  if (typeof serializedState !== 'string' || !serializedState) {
+    ensureMinimumLocations();
+    return;
+  }
+
+  try {
+    const parsedState = JSON.parse(serializedState);
+    const parsedLocations = Array.isArray(parsedState.locations) ? parsedState.locations : [];
+    const incrementExists = distanceOptions.some((option) => option.value === parsedState.distanceIncrementMeters);
+
+    form.distanceIncrementMeters = incrementExists ? parsedState.distanceIncrementMeters : 5000;
+    form.locations = parsedLocations.map((location, index) => {
+      return createLocation(
+        typeof location?.name === 'string' ? location.name : index === 0 ? 'Primary location' : `Relative location ${index}`,
+        coercePersistedCoordinate(location?.latitude),
+        coercePersistedCoordinate(location?.longitude)
+      );
+    });
+    ensureMinimumLocations();
+  } catch {
+    ensureMinimumLocations();
+  }
+}
+
+function readStoredState() {
+  try {
+    return window.localStorage.getItem(storageKey) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+function writeStoredState(serializedState) {
+  try {
+    window.localStorage.setItem(storageKey, serializedState);
+  } catch {
+    // Ignore storage failures so the demo still works in restricted browsers.
+  }
+}
+
+function coercePersistedCoordinate(value) {
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(value);
+  }
+
+  return '';
+}
 
 function normalizeCoordinateSegment(value) {
   return value.trim();
@@ -110,17 +200,12 @@ function handleLatitudeInput(location, event) {
 }
 
 function addLocation() {
-  form.locations.push({
-    id: nextLocationId,
-    name: `Relative location ${nextLocationId - 1}`,
-    latitude: '',
-    longitude: ''
-  });
-  nextLocationId += 1;
+  form.locations.push(createLocation(`Relative location ${form.locations.length}`));
 }
 
 function removeLocation(id) {
   form.locations = form.locations.filter((location) => location.id !== id);
+  ensureMinimumLocations();
 }
 
 function setExample() {
@@ -191,6 +276,18 @@ function updateMap() {
   }
 
   const primaryPoint = [primary.latitude, primary.longitude];
+
+function coercePersistedCoordinate(value) {
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(value);
+  }
+
+  return '';
+}
   const bounds = [primaryPoint];
 
   L.circleMarker(primaryPoint, {
@@ -272,6 +369,10 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  if (routeUpdateTimeout) {
+    clearTimeout(routeUpdateTimeout);
+  }
+
   if (map) {
     map.remove();
   }
@@ -279,6 +380,46 @@ onBeforeUnmount(() => {
 
 watch(validLocations, updateMap, { deep: true });
 watch(() => form.distanceIncrementMeters, updateMap);
+
+watch(
+  () => route.query.state,
+  (serializedState) => {
+    const nextSerializedState = typeof serializedState === 'string' ? serializedState : readStoredState();
+
+    if (nextSerializedState === serializeFormState()) {
+      return;
+    }
+
+    isApplyingRouteState.value = true;
+    applySerializedState(nextSerializedState);
+    isApplyingRouteState.value = false;
+  },
+  { immediate: true }
+);
+
+watch(
+  () => serializeFormState(),
+  (serializedState) => {
+    writeStoredState(serializedState);
+
+    if (isApplyingRouteState.value || serializedState === route.query.state) {
+      return;
+    }
+
+    if (routeUpdateTimeout) {
+      clearTimeout(routeUpdateTimeout);
+    }
+
+    routeUpdateTimeout = setTimeout(() => {
+      void router.replace({
+        query: {
+          ...route.query,
+          state: serializedState
+        }
+      });
+    }, 150);
+  }
+);
 </script>
 
 <template>
@@ -303,6 +444,8 @@ watch(() => form.distanceIncrementMeters, updateMap);
           </select>
         </label>
       </div>
+
+      <p class="input-hint share-hint">This page saves its locations and ring size in the URL and local storage so the demo can be reloaded or shared.</p>
 
       <form class="relative-distance-form" @submit.prevent>
         <section
