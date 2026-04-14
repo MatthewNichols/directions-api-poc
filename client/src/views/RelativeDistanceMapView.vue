@@ -396,7 +396,6 @@ function updateMap() {
       fillColor: ringStyle.color,
       fillOpacity: 0
     })
-      .bindTooltip(formatDistance(radius), { permanent: index === circleCount, direction: 'right' })
       .addTo(mapFeatures);
   }
 
