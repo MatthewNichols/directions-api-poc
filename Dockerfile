@@ -22,6 +22,8 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3001
 ENV VITE_MAPTILER_API_KEY=
+ENV MAPTILER_API_KEY=
+ENV GEO_LOOKUP_COUNTRY=
 
 COPY package*.json ./
 COPY server/package*.json ./server/
