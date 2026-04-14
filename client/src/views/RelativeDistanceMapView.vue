@@ -50,6 +50,18 @@ const isFormVisible = ref(true);
 
 let routeUpdateTimeout;
 
+const houseIcon = L.divIcon({
+  html: `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="24" viewBox="0 0 22 24">
+    <polygon points="11,1 21,10 1,10" fill="#219ebc" stroke="#8ecae6" stroke-width="1.5" stroke-linejoin="round"/>
+    <rect x="3" y="10" width="16" height="13" rx="1.5" fill="#219ebc" stroke="#8ecae6" stroke-width="1.5"/>
+    <rect x="8" y="16" width="6" height="7" rx="1" fill="rgba(142,202,230,0.55)" stroke="#8ecae6" stroke-width="1"/>
+  </svg>`,
+  className: '',
+  iconSize: [22, 24],
+  iconAnchor: [11, 24],
+  tooltipAnchor: [0, -24]
+});
+
 let map;
 let mapFeatures;
 
@@ -395,14 +407,8 @@ function updateMap() {
 
     const distanceMeters = getDistanceInMeters(primary, location);
 
-    L.circleMarker(point, {
-      radius: 10,
-      color: '#8ecae6',
-      fillColor: '#219ebc',
-      fillOpacity: 0.95,
-      weight: 2
-    })
-      .bindTooltip(`${location.name} • ${formatDistance(distanceMeters)}`, { direction: 'top', offset: [0, -8] })
+    L.marker(point, { icon: houseIcon })
+      .bindTooltip(`${location.name} • ${formatDistance(distanceMeters)}`, { direction: 'top', offset: [0, -4] })
       .addTo(mapFeatures);
 
     L.polyline([primaryPoint, point], {
