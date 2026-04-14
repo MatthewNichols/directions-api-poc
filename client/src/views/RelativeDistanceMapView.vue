@@ -276,21 +276,26 @@ function removeLocation(id) {
 }
 
 function setExample() {
-  form.locations[0].name = 'Boston';
-  form.locations[0].latitude = '42.3601';
-  form.locations[0].longitude = '-71.0589';
+  const examples = [
+    { name: 'Boston Common',   latitude: '42.3551', longitude: '-71.0657' },
+    { name: 'Fenway Park',     latitude: '42.3467', longitude: '-71.0972' },
+    { name: 'Logan Airport',   latitude: '42.3656', longitude: '-71.0096' },
+    { name: 'Harvard Square',  latitude: '42.3736', longitude: '-71.1190' },
+    { name: 'South Station',   latitude: '42.3519', longitude: '-71.0552' },
+  ];
 
-  form.locations[1].name = 'Cambridge';
-  form.locations[1].latitude = '42.3736';
-  form.locations[1].longitude = '-71.1097';
-
-  if (form.locations.length === 2) {
+  while (form.locations.length < examples.length) {
     addLocation();
   }
 
-  form.locations[2].name = 'Somerville';
-  form.locations[2].latitude = '42.3876';
-  form.locations[2].longitude = '-71.0995';
+  examples.forEach((example, index) => {
+    form.locations[index].name = example.name;
+    form.locations[index].latitude = example.latitude;
+    form.locations[index].longitude = example.longitude;
+  });
+
+  form.locations.splice(examples.length);
+  ensureMinimumLocations();
 }
 
 const validLocations = computed(() => {
