@@ -3,6 +3,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 
+import AddressLookupDialog from '../components/AddressLookupDialog.vue';
 import { createBaseTileLayer } from '../lib/maptiler';
 
 const form = reactive({
@@ -20,64 +21,13 @@ const mapElement = ref(null);
 // Address lookup dialog
 const addressDialog = ref(null);
 const addressDialogTarget = ref('');
-const addressSearchQuery = ref('');
-const addressCandidates = ref([]);
-const addressSearchError = ref('');
-const isSearching = ref(false);
 
 function openAddressDialog(prefix) {
   addressDialogTarget.value = prefix;
-  addressSearchQuery.value = '';
-  addressCandidates.value = [];
-  addressSearchError.value = '';
-  addressDialog.value.showModal();
+  addressDialog.value.open();
 }
 
-function closeAddressDialog() {
-  addressDialog.value.close();
-}
-
-async function searchAddress() {
-  const query = addressSearchQuery.value.trim();
-
-  if (!query) {
-    return;
-  }
-
-  isSearching.value = true;
-  addressSearchError.value = '';
-  addressCandidates.value = [];
-
-  try {
-    const response = await fetch(`/api/geocode?q=${encodeURIComponent(query)}`);
-    const data = await response.json();
-
-    if (!response.ok) {
-      addressSearchError.value = data.error || 'Search failed.';
-      return;
-    }
-
-    addressCandidates.value = data.features ?? [];
-
-    if (addressCandidates.value.length === 0) {
-      addressSearchError.value = 'No results found.';
-    }
-  } catch (error) {
-    addressSearchError.value = error instanceof Error ? error.message : 'Unexpected error.';
-  } finally {
-    isSearching.value = false;
-  }
-}
-
-function handleSearchKeydown(event) {
-  if (event.key === 'Enter') {
-    searchAddress();
-  }
-}
-
-function selectCandidate(feature) {
-  const [longitude, latitude] = feature.geometry.coordinates;
-
+function onAddressSelect({ latitude, longitude }) {
   if (addressDialogTarget.value === 'start') {
     form.startLatitude = String(latitude);
     form.startLongitude = String(longitude);
@@ -85,8 +35,6 @@ function selectCandidate(feature) {
     form.endLatitude = String(latitude);
     form.endLongitude = String(longitude);
   }
-
-  closeAddressDialog();
 }
 
 let map;
@@ -399,35 +347,7 @@ function setExample() {
         </button>
       </form>
 
-      <dialog ref="addressDialog" class="address-dialog">
-        <div class="address-dialog-header">
-          <h2>Look up address</h2>
-          <button class="ghost-button compact-button" type="button" @click="closeAddressDialog">Close</button>
-        </div>
-
-        <div class="address-search-row">
-          <input
-            v-model="addressSearchQuery"
-            type="text"
-            placeholder="123 Main St, Springfield..."
-            @keydown="handleSearchKeydown"
-          />
-          <button class="primary-button" type="button" :disabled="isSearching" @click="searchAddress">
-            {{ isSearching ? 'Searching...' : 'Search' }}
-          </button>
-        </div>
-
-        <p v-if="addressSearchError" class="feedback error">{{ addressSearchError }}</p>
-
-        <ul v-if="addressCandidates.length > 0" class="candidate-list">
-          <li v-for="feature in addressCandidates" :key="feature.id" class="candidate-item">
-            <button type="button" class="candidate-button" @click="selectCandidate(feature)">
-              <span class="candidate-name">{{ feature.place_name }}</span>
-              <span class="candidate-coords">{{ feature.geometry.coordinates[1].toFixed(5) }}, {{ feature.geometry.coordinates[0].toFixed(5) }}</span>
-            </button>
-          </li>
-        </ul>
-      </dialog>
+      <AddressLookupDialog ref="addressDialog" @select="onAddressSelect" />
 
       <section class="map-panel">
         <div class="map-panel-header">

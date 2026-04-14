@@ -4,6 +4,7 @@ import 'leaflet/dist/leaflet.css';
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
+import AddressLookupDialog from '../components/AddressLookupDialog.vue';
 import { createBaseTileLayer } from '../lib/maptiler';
 
 let nextLocationId = 3;
@@ -241,6 +242,24 @@ function handleLatitudeInput(location, event) {
   }
 
   location.latitude = nextValue;
+}
+
+// Address lookup dialog
+const addressDialog = ref(null);
+const addressDialogLocationId = ref(null);
+
+function openAddressDialog(location) {
+  addressDialogLocationId.value = location.id;
+  addressDialog.value.open();
+}
+
+function onAddressSelect({ latitude, longitude }) {
+  const location = form.locations.find((l) => l.id === addressDialogLocationId.value);
+
+  if (location) {
+    location.latitude = String(latitude);
+    location.longitude = String(longitude);
+  }
 }
 
 function addLocation() {
@@ -533,14 +552,17 @@ watch(
               <h2>{{ index === 0 ? 'Center point' : 'Comparison point' }}</h2>
             </div>
 
-            <button
-              v-if="index > 0"
-              class="ghost-button compact-button"
-              type="button"
-              @click="removeLocation(location.id)"
-            >
-              Remove
-            </button>
+            <div class="location-card-actions">
+              <button class="ghost-button compact-button" type="button" @click="openAddressDialog(location)">Look up address</button>
+              <button
+                v-if="index > 0"
+                class="ghost-button compact-button"
+                type="button"
+                @click="removeLocation(location.id)"
+              >
+                Remove
+              </button>
+            </div>
           </div>
 
           <label>
@@ -590,6 +612,8 @@ watch(
         </div>
         <div ref="mapElement" class="map-canvas" aria-label="Map showing the primary location, relative locations, and distance rings"></div>
       </section>
+
+      <AddressLookupDialog ref="addressDialog" @select="onAddressSelect" />
     </section>
   </section>
 </template>

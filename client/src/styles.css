@@ -216,6 +216,17 @@ h1 {
   gap: 1rem;
 }
 
+.location-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.location-card-actions .ghost-button {
+  margin-top: 0;
+}
+
 .compact-button {
   margin-top: 0;
   padding: 0.7rem 1rem;
