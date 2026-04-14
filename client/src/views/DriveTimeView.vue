@@ -45,6 +45,10 @@ function normalizeCoordinateSegment(value) {
 }
 
 function parseCoordinate(value) {
+  if (typeof value !== 'string' || !value.trim()) {
+    return null;
+  }
+
   const numericValue = Number(value);
 
   return Number.isFinite(numericValue) ? numericValue : null;
