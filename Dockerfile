@@ -2,6 +2,9 @@ FROM node:20-alpine AS build
 
 WORKDIR /app
 
+ARG VITE_MAPTILER_API_KEY
+ENV VITE_MAPTILER_API_KEY=$VITE_MAPTILER_API_KEY
+
 COPY package*.json ./
 COPY client/package*.json ./client/
 COPY server/package*.json ./server/
@@ -18,6 +21,7 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 ENV PORT=3001
+ENV VITE_MAPTILER_API_KEY=
 
 COPY package*.json ./
 COPY server/package*.json ./server/

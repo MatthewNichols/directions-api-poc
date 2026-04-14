@@ -3,6 +3,8 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 
+import { createBaseTileLayer } from '../lib/maptiler';
+
 const form = reactive({
   startLatitude: '',
   startLongitude: '',
@@ -199,10 +201,7 @@ onMounted(() => {
     attributionControl: true
   }).setView([39.5, -98.35], 4);
 
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19,
-    attribution: '&copy; OpenStreetMap contributors'
-  }).addTo(map);
+  createBaseTileLayer().addTo(map);
 
   mapFeatures = L.layerGroup().addTo(map);
   updateMap();

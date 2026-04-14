@@ -7,6 +7,7 @@ A small Node/Express plus Vue proof of concept for looking up drive time between
 - Express backend in `server/`
 - Vue 3 + Vite frontend in `client/`
 - OpenRouteService API key loaded from `server/.env`
+- MapTiler API key loaded from `client/.env`
 
 ## Getting started
 
@@ -28,13 +29,23 @@ A small Node/Express plus Vue proof of concept for looking up drive time between
 	ORS_API_KEY=your_key_here
 	```
 
-4. Start both apps:
+	4. Add your MapTiler API key to `client/.env`:
+
+		```bash
+		cp client/.env.example client/.env
+		```
+
+		```env
+		VITE_MAPTILER_API_KEY=your_key_here
+		```
+
+	5. Start both apps:
 
 	```bash
 	npm run dev
 	```
 
-5. Open the frontend at `http://localhost:5173`
+	6. Open the frontend at `http://localhost:5173`
 
 The backend exposes `POST /api/route-time` and expects this payload:
 
@@ -76,7 +87,7 @@ docker build -t directions-api-poc .
 Run it with your ORS key:
 
 ```bash
-docker run --rm -p 3001:3001 -e ORS_API_KEY=your_key_here directions-api-poc
+docker run --rm -p 3001:3001 -e ORS_API_KEY=your_ors_key_here directions-api-poc
 ```
 
 Then open `http://localhost:3001`
@@ -86,7 +97,7 @@ Then open `http://localhost:3001`
 Run the stack with:
 
 ```bash
-ORS_API_KEY=your_key_here docker compose up --build
+ORS_API_KEY=your_ors_key_here VITE_MAPTILER_API_KEY=your_maptiler_key_here docker compose up --build
 ```
 
 Then open `http://localhost:3001`
@@ -110,9 +121,12 @@ If you use the Docker Compose flow in Coolify:
 Add this environment variable in Coolify:
 
 - `ORS_API_KEY=your_openrouteservice_key`
+- `VITE_MAPTILER_API_KEY=your_maptiler_key`
 
 Optional environment variable:
 
 - `PORT=3001`
+
+If you use the Dockerfile flow, make sure Coolify passes `VITE_MAPTILER_API_KEY` as a build argument too, since Vite injects it into the frontend at build time.
 
 Coolify can expose the app on your chosen domain or generated URL. The frontend and API will both be served from the same container, so no extra reverse proxy setup is required.
