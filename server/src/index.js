@@ -9,6 +9,8 @@ dotenv.config();
 const app = express();
 const port = Number(process.env.PORT || 3001);
 const orsApiKey = process.env.ORS_API_KEY;
+const mapTilerApiKey = process.env.MAPTILER_API_KEY;
+const geoLookupCountry = process.env.GEO_LOOKUP_COUNTRY || '';
 const currentFilePath = fileURLToPath(import.meta.url);
 const currentDirectory = path.dirname(currentFilePath);
 const clientDistPath = path.resolve(currentDirectory, '../../client/dist');
@@ -44,6 +46,52 @@ function validateLatLongPair(input, prefix) {
 
   return { latitude, longitude };
 }
+
+app.get('/api/geocode', async (request, response) => {
+  if (!mapTilerApiKey) {
+    response.status(500).json({
+      error: 'MAPTILER_API_KEY is not configured. Add it to server/.env before calling this endpoint.'
+    });
+    return;
+  }
+
+  const query = typeof request.query.q === 'string' ? request.query.q.trim() : '';
+
+  if (!query) {
+    response.status(400).json({ error: 'Query parameter "q" is required.' });
+    return;
+  }
+
+  const url = new URL(`https://api.maptiler.com/geocoding/${encodeURIComponent(query)}.json`);
+  url.searchParams.set('key', mapTilerApiKey);
+
+  if (geoLookupCountry) {
+    url.searchParams.set('country', geoLookupCountry.toLowerCase());
+  }
+
+  try {
+    const geocodeResponse = await fetch(url.toString());
+
+    if (!geocodeResponse.ok) {
+      const errorText = await geocodeResponse.text();
+
+      response.status(geocodeResponse.status).json({
+        error: 'MapTiler geocoding request failed.',
+        details: errorText
+      });
+      return;
+    }
+
+    const data = await geocodeResponse.json();
+
+    response.json(data);
+  } catch (error) {
+    response.status(500).json({
+      error: 'Unable to fetch geocoding results.',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
 
 app.get('/api/health', (_request, response) => {
   response.json({ ok: true });

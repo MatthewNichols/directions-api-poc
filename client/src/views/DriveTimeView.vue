@@ -17,6 +17,78 @@ const errorMessage = ref('');
 const isSubmitting = ref(false);
 const mapElement = ref(null);
 
+// Address lookup dialog
+const addressDialog = ref(null);
+const addressDialogTarget = ref('');
+const addressSearchQuery = ref('');
+const addressCandidates = ref([]);
+const addressSearchError = ref('');
+const isSearching = ref(false);
+
+function openAddressDialog(prefix) {
+  addressDialogTarget.value = prefix;
+  addressSearchQuery.value = '';
+  addressCandidates.value = [];
+  addressSearchError.value = '';
+  addressDialog.value.showModal();
+}
+
+function closeAddressDialog() {
+  addressDialog.value.close();
+}
+
+async function searchAddress() {
+  const query = addressSearchQuery.value.trim();
+
+  if (!query) {
+    return;
+  }
+
+  isSearching.value = true;
+  addressSearchError.value = '';
+  addressCandidates.value = [];
+
+  try {
+    const response = await fetch(`/api/geocode?q=${encodeURIComponent(query)}`);
+    const data = await response.json();
+
+    if (!response.ok) {
+      addressSearchError.value = data.error || 'Search failed.';
+      return;
+    }
+
+    addressCandidates.value = data.features ?? [];
+
+    if (addressCandidates.value.length === 0) {
+      addressSearchError.value = 'No results found.';
+    }
+  } catch (error) {
+    addressSearchError.value = error instanceof Error ? error.message : 'Unexpected error.';
+  } finally {
+    isSearching.value = false;
+  }
+}
+
+function handleSearchKeydown(event) {
+  if (event.key === 'Enter') {
+    searchAddress();
+  }
+}
+
+function selectCandidate(feature) {
+  const [longitude, latitude] = feature.geometry.coordinates;
+
+  if (addressDialogTarget.value === 'start') {
+    form.startLatitude = String(latitude);
+    form.startLongitude = String(longitude);
+  } else {
+    form.endLatitude = String(latitude);
+    form.endLongitude = String(longitude);
+  }
+
+  closeAddressDialog();
+}
+
 let map;
 let mapFeatures;
 
@@ -275,7 +347,10 @@ function setExample() {
 
       <form class="coordinate-form" @submit.prevent="submitForm">
         <div class="coordinate-group">
-          <h2>Start</h2>
+          <div class="coordinate-group-header">
+            <h2>Start</h2>
+            <button class="ghost-button compact-button" type="button" @click="openAddressDialog('start')">Look up address</button>
+          </div>
           <label>
             <span>Latitude</span>
             <input
@@ -296,7 +371,10 @@ function setExample() {
         </div>
 
         <div class="coordinate-group">
-          <h2>End</h2>
+          <div class="coordinate-group-header">
+            <h2>End</h2>
+            <button class="ghost-button compact-button" type="button" @click="openAddressDialog('end')">Look up address</button>
+          </div>
           <label>
             <span>Latitude</span>
             <input
@@ -320,6 +398,36 @@ function setExample() {
           {{ isSubmitting ? 'Calculating...' : 'Get drive time' }}
         </button>
       </form>
+
+      <dialog ref="addressDialog" class="address-dialog">
+        <div class="address-dialog-header">
+          <h2>Look up address</h2>
+          <button class="ghost-button compact-button" type="button" @click="closeAddressDialog">Close</button>
+        </div>
+
+        <div class="address-search-row">
+          <input
+            v-model="addressSearchQuery"
+            type="text"
+            placeholder="123 Main St, Springfield..."
+            @keydown="handleSearchKeydown"
+          />
+          <button class="primary-button" type="button" :disabled="isSearching" @click="searchAddress">
+            {{ isSearching ? 'Searching...' : 'Search' }}
+          </button>
+        </div>
+
+        <p v-if="addressSearchError" class="feedback error">{{ addressSearchError }}</p>
+
+        <ul v-if="addressCandidates.length > 0" class="candidate-list">
+          <li v-for="feature in addressCandidates" :key="feature.id" class="candidate-item">
+            <button type="button" class="candidate-button" @click="selectCandidate(feature)">
+              <span class="candidate-name">{{ feature.place_name }}</span>
+              <span class="candidate-coords">{{ feature.geometry.coordinates[1].toFixed(5) }}, {{ feature.geometry.coordinates[0].toFixed(5) }}</span>
+            </button>
+          </li>
+        </ul>
+      </dialog>
 
       <section class="map-panel">
         <div class="map-panel-header">
