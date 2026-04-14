@@ -1,62 +1,108 @@
 # directions-api-poc
 
-A small Node/Express plus Vue proof of concept for looking up drive time between two latitude/longitude pairs with OpenRouteService.
+A Node/Express + Vue 3 proof of concept with two map views:
+
+- **Drive Time** (`/`) — enter two lat/long pairs, hit the backend, get driving duration and distance from OpenRouteService.
+- **Relative Distance Map** (`/relative-distance-map`) — place a primary location and any number of comparison points; renders distance rings and straight-line distances using Leaflet with no backend call.
 
 ## Stack
 
-- Express backend in `server/`
-- Vue 3 + Vite frontend in `client/`
-- OpenRouteService API key loaded from `server/.env`
-- MapTiler API key loaded from `client/.env`
+| Layer | Tech |
+|---|---|
+| Backend | Node 20 / Express 4, ESM (`"type": "module"`) |
+| Frontend | Vue 3 + Vite 6, Vue Router 4 |
+| Maps | Leaflet 1.9 + MapTiler Streets tile layer |
+| Routing API | OpenRouteService v2 (driving-car profile) |
+| Dev runner | `concurrently` from the root workspace |
+
+## Project structure
+
+```
+directions-api-poc/
+├── package.json           # root workspace (server + client), dev/build scripts
+├── server/
+│   ├── package.json       # Express, cors, dotenv
+│   ├── .env.example
+│   └── src/index.js       # single-file Express server
+└── client/
+    ├── package.json       # Vue, Leaflet, vue-router, Vite
+    ├── .env.example
+    ├── vite.config.js
+    └── src/
+        ├── main.js
+        ├── router/index.js
+        ├── lib/maptiler.js        # tile layer factory, reads VITE_MAPTILER_API_KEY
+        └── views/
+            ├── DriveTimeView.vue
+            └── RelativeDistanceMapView.vue
+```
 
 ## Getting started
 
-1. Install dependencies:
+### 1. Install
 
-	```bash
-	npm install
-	```
+```bash
+npm install          # installs all workspaces from the root
+```
 
-2. Create your env file:
+### 2. Set up env files
 
-	```bash
-	cp server/.env.example server/.env
-	```
+```bash
+cp server/.env.example server/.env
+cp client/.env.example client/.env
+```
 
-3. Add your OpenRouteService API key to `server/.env`:
+Fill in the keys:
 
-	```env
-	ORS_API_KEY=your_key_here
-	```
+`server/.env`
+```env
+ORS_API_KEY=your_openrouteservice_api_key_here
+PORT=3001
+```
 
-	4. Add your MapTiler API key to `client/.env`:
+`client/.env`
+```env
+VITE_MAPTILER_API_KEY=your_maptiler_api_key_here
+```
 
-		```bash
-		cp client/.env.example client/.env
-		```
+### 3. Run in dev mode
 
-		```env
-		VITE_MAPTILER_API_KEY=your_key_here
-		```
+```bash
+npm run dev          # starts server (port 3001) and Vite dev server (port 5173) concurrently
+```
 
-	5. Start both apps:
+Individual workspace scripts:
 
-	```bash
-	npm run dev
-	```
+```bash
+npm run dev:server   # node --watch server/src/index.js
+npm run dev:client   # vite (client/)
+```
 
-	6. Open the frontend at `http://localhost:5173`
+### 4. Open the app
 
-The backend exposes `POST /api/route-time` and expects this payload:
+- Frontend dev server: `http://localhost:5173`
+- Backend only: `http://localhost:3001`
+
+In dev, Vite proxies `/api/*` requests to the Express server. In production (Docker), Express serves both.
+
+## API
+
+### `GET /api/health`
+
+Returns `{ "ok": true }`.
+
+### `POST /api/route-time`
+
+Request body:
 
 ```json
 {
   "start": { "latitude": 42.3601, "longitude": -71.0589 },
-  "end": { "latitude": 42.3736, "longitude": -71.1097 }
+  "end":   { "latitude": 42.3736, "longitude": -71.1097 }
 }
 ```
 
-Successful responses look like:
+Success response:
 
 ```json
 {
@@ -66,67 +112,80 @@ Successful responses look like:
 }
 ```
 
+Error responses follow `{ "error": "...", "details": "..." }`.
+
+## Frontend notes
+
+### Coordinate paste parsing
+
+Both views accept a combined `lat,long` paste into the latitude field. Supported separators: `,` `/` `\` or a space. Pasting `42.3601,-71.0589` into the latitude input fills both latitude and longitude automatically.
+
+### Relative Distance Map — state persistence
+
+State (locations, ring increment, ring colors) is serialized to JSON and synced to:
+
+- The URL query string (`?state=...`) with a 150 ms debounce — shareable links.
+- `localStorage` key `relative-distance-map-state` — survives page reload without the query param.
+
+Ring colors are stored as 8-character hex strings (`#rrggbbaa`). The color pickers use the native `<input type="color" alpha>` attribute.
+
+## Scripts reference
+
+| Command | What it does |
+|---|---|
+| `npm run dev` | Runs server + client in parallel |
+| `npm run dev:server` | Express with `--watch` (auto-restarts on file change) |
+| `npm run dev:client` | Vite HMR dev server |
+| `npm run build` | Builds client to `client/dist/` |
+| `npm run check:server` | `node --check` syntax check on the server entry |
+
 ## Docker / Coolify
 
-This repo can be deployed to Coolify with either the root `Dockerfile` or the root `docker-compose.yml`.
+The container builds the Vue frontend at image build time and serves it from the same Express process.
 
-### What the container does
+### Build args vs runtime env
 
-- Builds the Vue frontend from `client/`
-- Runs the Express backend from `server/`
-- Serves the built frontend from the same Express process
+| Variable | Where it's needed | How |
+|---|---|---|
+| `VITE_MAPTILER_API_KEY` | Build time (Vite injects into JS bundle) | Docker `ARG` / Coolify build arg |
+| `ORS_API_KEY` | Runtime (Express reads `process.env`) | Docker `-e` / Coolify env var |
+| `PORT` | Runtime (defaults to `3001`) | Optional |
 
-### Local Docker test
-
-Build the image:
-
-```bash
-docker build -t directions-api-poc .
-```
-
-Run it with your ORS key:
+### Local Docker
 
 ```bash
-docker run --rm -p 3001:3001 -e ORS_API_KEY=your_ors_key_here directions-api-poc
+docker build \
+  --build-arg VITE_MAPTILER_API_KEY=your_maptiler_key \
+  -t directions-api-poc .
+
+docker run --rm -p 3001:3001 \
+  -e ORS_API_KEY=your_ors_key \
+  directions-api-poc
 ```
 
-Then open `http://localhost:3001`
+Open `http://localhost:3001`.
 
-### Local Docker Compose test
-
-Run the stack with:
+### Local Docker Compose
 
 ```bash
-ORS_API_KEY=your_ors_key_here VITE_MAPTILER_API_KEY=your_maptiler_key_here docker compose up --build
+ORS_API_KEY=your_ors_key \
+VITE_MAPTILER_API_KEY=your_maptiler_key \
+docker compose up --build
 ```
 
-Then open `http://localhost:3001`
-
-### Coolify setup
-
-If you use the Dockerfile flow in Coolify, use these settings:
+### Coolify — Dockerfile flow
 
 - Build Pack: `Dockerfile`
-- Dockerfile Location: `./Dockerfile`
 - Port: `3001`
 - Health Check Path: `/api/health`
+- Environment variables:
+  - `ORS_API_KEY` (runtime)
+  - `VITE_MAPTILER_API_KEY` (must also be set as a **build arg** so Vite picks it up at image build time)
 
-If you use the Docker Compose flow in Coolify:
+### Coolify — Docker Compose flow
 
 - Compose File: `./docker-compose.yml`
 - Service: `directions-api-poc`
 - Port: `3001`
 - Health Check Path: `/api/health`
-
-Add this environment variable in Coolify:
-
-- `ORS_API_KEY=your_openrouteservice_key`
-- `VITE_MAPTILER_API_KEY=your_maptiler_key`
-
-Optional environment variable:
-
-- `PORT=3001`
-
-If you use the Dockerfile flow, make sure Coolify passes `VITE_MAPTILER_API_KEY` as a build argument too, since Vite injects it into the frontend at build time.
-
-Coolify can expose the app on your chosen domain or generated URL. The frontend and API will both be served from the same container, so no extra reverse proxy setup is required.
+- Same env vars as above.
