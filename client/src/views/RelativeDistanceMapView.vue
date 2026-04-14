@@ -544,25 +544,23 @@ watch(
         <section
           v-for="(location, index) in form.locations"
           :key="location.id"
-          class="coordinate-group location-card"
+          :class="['coordinate-group', 'location-card', { 'has-remove-button': index > 0 }]"
         >
+          <button
+            v-if="index > 0"
+            class="remove-location-button"
+            type="button"
+            aria-label="Remove location"
+            @click="removeLocation(location.id)"
+          >×</button>
+
           <div class="location-card-header">
             <div>
               <p class="result-label">{{ index === 0 ? 'Primary' : `Relative ${index}` }}</p>
               <h2>{{ index === 0 ? 'Center point' : 'Comparison point' }}</h2>
             </div>
 
-            <div class="location-card-actions">
-              <button class="ghost-button compact-button" type="button" @click="openAddressDialog(location)">Look up address</button>
-              <button
-                v-if="index > 0"
-                class="ghost-button compact-button"
-                type="button"
-                @click="removeLocation(location.id)"
-              >
-                Remove
-              </button>
-            </div>
+            <button class="lookup-address-button ghost-button compact-button" type="button" @click="openAddressDialog(location)">Look up address</button>
           </div>
 
           <label>

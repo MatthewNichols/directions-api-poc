@@ -206,7 +206,45 @@ h1 {
 }
 
 .location-card {
+  position: relative;
   gap: 1rem;
+}
+
+.has-remove-button {
+  padding-right: 3rem;
+}
+
+.remove-location-button {
+  position: absolute;
+  top: 0.7rem;
+  right: 0.7rem;
+  width: 1.6rem;
+  height: 1.6rem;
+  padding: 0;
+  border: 1px solid rgba(245, 239, 230, 0.18);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(245, 239, 230, 0.6);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease;
+}
+
+.remove-location-button:hover {
+  background: rgba(255, 80, 80, 0.16);
+  border-color: rgba(255, 100, 100, 0.4);
+  color: #ff9a8b;
+}
+
+.lookup-address-button {
+  margin-right: 2rem;
 }
 
 .location-card-header {
@@ -216,16 +254,6 @@ h1 {
   gap: 1rem;
 }
 
-.location-card-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  align-items: center;
-}
-
-.location-card-actions .ghost-button {
-  margin-top: 0;
-}
 
 .compact-button {
   margin-top: 0;
