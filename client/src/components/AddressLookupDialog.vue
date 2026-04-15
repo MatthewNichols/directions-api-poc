@@ -1,4 +1,14 @@
 <script setup>
+// ─── AddressLookupDialog ──────────────────────────────────────────────────────
+// A modal <dialog> that lets users search for a place name and select a result
+// to fill in the latitude/longitude fields of the parent form.  The search is
+// forwarded to the backend's /api/geocode proxy so the MapTiler API key is
+// never exposed in the browser bundle.
+//
+// Usage:
+//   <AddressLookupDialog ref="dialog" @select="onSelect" />
+//   dialog.value.open()               // open the modal
+//   // @select fires with { latitude, longitude } when the user picks a result
 import { ref } from 'vue';
 
 const emit = defineEmits(['select']);
@@ -9,6 +19,7 @@ const candidates = ref([]);
 const searchError = ref('');
 const isSearching = ref(false);
 
+// Reset transient state and open the native <dialog> element.
 function open() {
   searchQuery.value = '';
   candidates.value = [];
@@ -20,6 +31,8 @@ function close() {
   dialog.value.close();
 }
 
+// Sends the current query to /api/geocode and stores the returned GeoJSON
+// features as selectable candidates.  Errors are shown inline; no throws.
 async function searchAddress() {
   const query = searchQuery.value.trim();
 
@@ -52,12 +65,16 @@ async function searchAddress() {
   }
 }
 
+// Allow submitting the search with the Enter key inside the text input.
 function handleKeydown(event) {
   if (event.key === 'Enter') {
     searchAddress();
   }
 }
 
+// Extract the coordinate pair from the selected GeoJSON feature and emit it to
+// the parent.  GeoJSON stores coordinates as [longitude, latitude], so they are
+// destructured in reverse order here.
 function selectCandidate(feature) {
   const [longitude, latitude] = feature.geometry.coordinates;
 

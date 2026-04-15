@@ -1,4 +1,9 @@
 <script setup>
+// ─── DriveTimeView ────────────────────────────────────────────────────────────
+// Lets users enter a start and end coordinate pair, calls the backend's
+// POST /api/route-time endpoint, and displays the driving duration and total
+// distance.  A live Leaflet map previews the entered points as soon as valid
+// coordinates are present.
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
@@ -6,6 +11,9 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import AddressLookupDialog from '../components/AddressLookupDialog.vue';
 import { createBaseTileLayer } from '../lib/maptiler';
 
+// ─── Form State ───────────────────────────────────────────────────────────────
+// Held as a reactive object so the template can bind to individual fields and
+// the computed coordinate parsers can react to any change.
 const form = reactive({
   startLatitude: '',
   startLongitude: '',
@@ -16,9 +24,12 @@ const form = reactive({
 const result = ref(null);
 const errorMessage = ref('');
 const isSubmitting = ref(false);
+// Template ref for the map container <div>.
 const mapElement = ref(null);
 
-// Address lookup dialog
+// ─── Address Lookup Dialog ────────────────────────────────────────────────────
+// addressDialogTarget tracks which coordinate group ('start' or 'end') opened
+// the dialog so the selected address can be written to the correct form fields.
 const addressDialog = ref(null);
 const addressDialogTarget = ref('');
 
@@ -27,6 +38,7 @@ function openAddressDialog(prefix) {
   addressDialog.value.open();
 }
 
+// Called when the user picks a result inside AddressLookupDialog.
 function onAddressSelect({ latitude, longitude }) {
   if (addressDialogTarget.value === 'start') {
     form.startLatitude = String(latitude);
@@ -37,13 +49,26 @@ function onAddressSelect({ latitude, longitude }) {
   }
 }
 
+// ─── Leaflet Map Instances ────────────────────────────────────────────────────
+// Declared outside Vue's reactivity system because Leaflet manages its own
+// internal state.  Wrapping map objects in ref() or reactive() can cause
+// infinite re-render loops.
 let map;
 let mapFeatures;
 
+// ─── Coordinate Parsing Utilities ─────────────────────────────────────────────
+// These helpers are shared between the latitude input handler and the
+// paste handler.  They allow users to paste a combined "lat,long" string
+// (or lat/long, lat\long, or "lat long") into the latitude field and have both
+// fields filled automatically.
+
+// Trims whitespace from a single coordinate segment after splitting.
 function normalizeCoordinateSegment(value) {
   return value.trim();
 }
 
+// Converts a string to a finite number, returning null on failure.
+// Returning null (rather than NaN) lets callers use simple null-checks.
 function parseCoordinate(value) {
   if (typeof value !== 'string' || !value.trim()) {
     return null;
@@ -54,6 +79,11 @@ function parseCoordinate(value) {
   return Number.isFinite(numericValue) ? numericValue : null;
 }
 
+// Tries to interpret a string as a "lat separator long" pair.
+// Accepted separators: comma, forward-slash, backslash, or a single space.
+// Returns { latitude, longitude } as strings (preserving the original text so
+// the input fields reflect what the user pasted), or null if the value doesn't
+// match the expected two-segment format.
 function extractCoordinatePair(value) {
   if (typeof value !== 'string') {
     return null;
@@ -85,6 +115,8 @@ function extractCoordinatePair(value) {
   };
 }
 
+// Attempts to apply a combined coordinate string to the given form fields.
+// Returns true if both fields were set, false if the value wasn't a valid pair.
 function applyCoordinatePair(prefix, rawValue) {
   const coordinatePair = extractCoordinatePair(rawValue);
 
@@ -103,6 +135,9 @@ function applyCoordinatePair(prefix, rawValue) {
   return true;
 }
 
+// Intercepts paste events on the latitude input.  If the pasted text looks like
+// a full coordinate pair the default paste is suppressed and both fields are
+// filled; otherwise the browser's default paste behaviour is preserved.
 function handleLatitudePaste(prefix, event) {
   const pastedText = event.clipboardData?.getData('text') ?? '';
 
@@ -113,6 +148,9 @@ function handleLatitudePaste(prefix, event) {
   event.preventDefault();
 }
 
+// Handles manual typing in the latitude input.  Each keystroke is tested
+// against the coordinate-pair pattern so that pasting via the keyboard shortcut
+// (which fires 'input', not 'paste') also triggers the auto-fill.
 function handleLatitudeInput(prefix, event) {
   const nextValue = event.target.value;
 
@@ -127,6 +165,11 @@ function handleLatitudeInput(prefix, event) {
 
   form.endLatitude = nextValue;
 }
+
+// ─── Computed Coordinates ─────────────────────────────────────────────────────
+// These computed refs drive both the map preview and the submit button.  They
+// return null whenever either field cannot be parsed as a finite number, which
+// lets the map and the form degrade gracefully with partial input.
 
 const startCoordinates = computed(() => {
   const latitude = parseCoordinate(form.startLatitude);
@@ -150,8 +193,15 @@ const endCoordinates = computed(() => {
   return { latitude, longitude };
 });
 
+// True when at least one valid coordinate pair exists; used to toggle the
+// map status message between "enter coordinates" and "markers update as you type".
 const hasMapPoints = computed(() => Boolean(startCoordinates.value || endCoordinates.value));
 
+// ─── Map Rendering ────────────────────────────────────────────────────────────
+// Redraws the feature layer (markers + dashed line) whenever the computed
+// coordinates change.  Using a dedicated LayerGroup (mapFeatures) means a full
+// map reinitialisation is never needed — clearLayers() removes old features
+// before the new ones are drawn.
 function updateMap() {
   if (!map || !mapFeatures) {
     return;
@@ -191,6 +241,9 @@ function updateMap() {
       .addTo(mapFeatures);
   }
 
+  // Draw a dashed straight line between the two points as a visual aid.
+  // This is NOT the driving route — the route polyline would require an
+  // additional API call to OpenRouteService.
   if (startCoordinates.value && endCoordinates.value) {
     L.polyline(
       [
@@ -206,6 +259,8 @@ function updateMap() {
     ).addTo(mapFeatures);
   }
 
+  // Fit the viewport to the markers, or reset to a country-level US view when
+  // no valid coordinates are present.
   if (bounds.length === 0) {
     map.setView([39.5, -98.35], 4);
     return;
@@ -218,6 +273,8 @@ function updateMap() {
 
   map.fitBounds(bounds, { padding: [36, 36] });
 }
+
+// ─── Lifecycle Hooks ──────────────────────────────────────────────────────────
 
 onMounted(() => {
   map = L.map(mapElement.value, {
@@ -232,13 +289,21 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  // Remove the Leaflet instance to prevent memory leaks when the component
+  // is torn down (e.g. navigating away via Vue Router).
   if (map) {
     map.remove();
   }
 });
 
+// Re-render map features whenever either computed coordinate changes.
 watch([startCoordinates, endCoordinates], updateMap, { deep: true });
 
+// ─── Form Submission ──────────────────────────────────────────────────────────
+
+// POST /api/route-time with the current start and end coordinates.
+// The backend validates the payload and forwards it to OpenRouteService;
+// the result is a simplified summary with duration and distance.
 async function submitForm() {
   errorMessage.value = '';
   result.value = null;
@@ -277,6 +342,8 @@ async function submitForm() {
   }
 }
 
+// Fills the form with a short Boston-area route so users can try the feature
+// without needing to know any real coordinates.
 function setExample() {
   form.startLatitude = '42.3601';
   form.startLongitude = '-71.0589';

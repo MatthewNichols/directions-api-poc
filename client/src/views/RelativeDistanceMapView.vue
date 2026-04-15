@@ -1,4 +1,9 @@
 <script setup>
+// ─── RelativeDistanceMapView ──────────────────────────────────────────────────
+// Displays a Leaflet map centred on a "primary" location and overlays concentric
+// distance rings to show how far away one or more "relative" locations are.
+// The full form state (locations + ring settings) is serialised to a URL query
+// parameter and to localStorage so the view can be bookmarked or shared.
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
@@ -7,12 +12,20 @@ import { useRoute, useRouter } from 'vue-router';
 import AddressLookupDialog from '../components/AddressLookupDialog.vue';
 import { createBaseTileLayer } from '../lib/maptiler';
 
+// Monotonically-increasing counter used to assign unique IDs to dynamically
+// added locations.  Starts at 3 because IDs 1 and 2 are used by the two
+// default locations in the initial form state.
 let nextLocationId = 3;
+// localStorage key under which the serialised form state is persisted between
+// page loads.
 const storageKey = 'relative-distance-map-state';
 
 const route = useRoute();
 const router = useRouter();
 
+// ─── Distance Ring Options ────────────────────────────────────────────────────
+// Presented as a <select> in the toolbar.  Changing the value re-renders the
+// ring overlay on the map without touching the location list.
 const distanceOptions = [
   { label: '1 km rings', value: 1000 },
   { label: '5 km rings', value: 5000 },
@@ -21,8 +34,11 @@ const distanceOptions = [
   { label: '50 km rings', value: 50000 }
 ];
 
+// ─── Form State ───────────────────────────────────────────────────────────────
 const form = reactive({
   distanceIncrementMeters: 5000,
+  // Hex colours (with optional two-digit alpha suffix, e.g. '#8ecae699') for
+  // alternating distance rings.  Odd rings = 1st, 3rd, 5th…; even = 2nd, 4th…
   ringColors: {
     odd: '#8ecae699',
     even: '#f7c873bf'
@@ -43,13 +59,21 @@ const form = reactive({
   ]
 });
 
+// Template ref for the map container <div>.
 const mapElement = ref(null);
+// Flag set while applySerializedState() is running so the form-change watcher
+// does not try to push a URL update while we are already applying one.
 const isApplyingRouteState = ref(false);
 const isMapExpanded = ref(false);
 const isFormVisible = ref(true);
 
+// Debounce handle for URL pushes — we wait 150 ms after the last keystroke
+// before updating the URL to avoid polluting the browser history.
 let routeUpdateTimeout;
 
+// ─── Map Icons ────────────────────────────────────────────────────────────────
+// SVG house icon used for relative (non-primary) location markers.  Using a
+// DivIcon lets us inline SVG so no external image file is required.
 const houseIcon = L.divIcon({
   html: `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="24" viewBox="0 0 22 24">
     <polygon points="11,1 21,10 1,10" fill="#219ebc" stroke="#8ecae6" stroke-width="1.5" stroke-linejoin="round"/>
@@ -62,9 +86,15 @@ const houseIcon = L.divIcon({
   tooltipAnchor: [0, -24]
 });
 
+// ─── Leaflet Map Instances ────────────────────────────────────────────────────
+// Kept outside Vue's reactivity system to avoid Leaflet/Proxy conflicts.
 let map;
 let mapFeatures;
 
+// ─── Location Helpers ─────────────────────────────────────────────────────────
+
+// Factory for location objects.  Assigning a stable numeric id lets Vue's
+// v-for track items correctly when locations are added or removed.
 function createLocation(name = '', latitude = '', longitude = '') {
   const location = {
     id: nextLocationId,
@@ -77,12 +107,22 @@ function createLocation(name = '', latitude = '', longitude = '') {
   return location;
 }
 
+// Guarantees the form always has at least two locations (primary + one relative)
+// regardless of how many were loaded from persisted state.
 function ensureMinimumLocations() {
   while (form.locations.length < 2) {
     form.locations.push(createLocation(`Relative location ${form.locations.length}`));
   }
 }
 
+// ─── State Serialisation ──────────────────────────────────────────────────────
+// The form state is stored as a JSON string in both the URL query parameter
+// (?state=…) and localStorage.  This makes the view bookmarkable and shareable:
+// a URL with a state param will restore the exact locations and ring settings.
+
+// Produces the canonical JSON string for the current form state.  Only the
+// fields that should be persisted are included (id is excluded because it is
+// regenerated on load).
 function serializeFormState() {
   return JSON.stringify({
     distanceIncrementMeters: form.distanceIncrementMeters,
@@ -98,6 +138,8 @@ function serializeFormState() {
   });
 }
 
+// Parses a serialised state string and updates the reactive form.  Falls back
+// to two empty default locations if parsing fails or the string is empty.
 function applySerializedState(serializedState) {
   if (typeof serializedState !== 'string' || !serializedState) {
     ensureMinimumLocations();
@@ -125,6 +167,8 @@ function applySerializedState(serializedState) {
   }
 }
 
+// ─── localStorage Helpers ─────────────────────────────────────────────────────
+
 function readStoredState() {
   try {
     return window.localStorage.getItem(storageKey) ?? '';
@@ -133,6 +177,8 @@ function readStoredState() {
   }
 }
 
+// Storage errors are silently ignored so the demo continues to work in
+// browsers with localStorage disabled or in private-browsing mode.
 function writeStoredState(serializedState) {
   try {
     window.localStorage.setItem(storageKey, serializedState);
@@ -141,6 +187,13 @@ function writeStoredState(serializedState) {
   }
 }
 
+// ─── Persistence Coercion Helpers ─────────────────────────────────────────────
+// These helpers sanitise values read from JSON / localStorage before writing
+// them into the reactive form, preventing malformed stored data from breaking
+// the UI.
+
+// Accepts a string or number coordinate value and returns a string, or '' if
+// the value cannot be sensibly coerced.
 function coercePersistedCoordinate(value) {
   if (typeof value === 'string') {
     return value;
@@ -153,6 +206,9 @@ function coercePersistedCoordinate(value) {
   return '';
 }
 
+// Returns the value unchanged if it is a valid 6- or 8-digit hex colour
+// string (with or without a two-digit alpha suffix), otherwise returns the
+// provided fallback.
 function coercePersistedColor(value, fallback) {
   if (typeof value !== 'string') {
     return fallback;
@@ -167,6 +223,9 @@ function coercePersistedColor(value, fallback) {
   return fallback;
 }
 
+// Converts a hex-with-alpha colour string (e.g. '#8ecae699') to separate
+// color and opacity values that Leaflet's circle options understand.
+// For a 6-digit hex (no alpha) the opacity is returned as 1.
 function parseRingColor(value, fallback) {
   const normalizedValue = coercePersistedColor(value, fallback);
 
@@ -183,10 +242,15 @@ function parseRingColor(value, fallback) {
   };
 }
 
+// ─── Coordinate Parsing Utilities ─────────────────────────────────────────────
+// Same pattern as DriveTimeView: these allow pasting a "lat,long" string into
+// the latitude field to auto-fill both latitude and longitude at once.
+
 function normalizeCoordinateSegment(value) {
   return value.trim();
 }
 
+// Converts a string to a finite number, returning null on failure.
 function parseCoordinate(value) {
   if (typeof value !== 'string' || !value.trim()) {
     return null;
@@ -197,6 +261,9 @@ function parseCoordinate(value) {
   return Number.isFinite(numericValue) ? numericValue : null;
 }
 
+// Tries to split a value into a lat/long pair using common separators
+// (comma, slash, backslash, space).  Returns { latitude, longitude } as
+// strings, or null if the value doesn't look like a pair.
 function extractCoordinatePair(value) {
   if (typeof value !== 'string') {
     return null;
@@ -228,6 +295,9 @@ function extractCoordinatePair(value) {
   };
 }
 
+// Writes both latitude and longitude on the given location object if the raw
+// value parses as a coordinate pair.  Returns true on success so callers can
+// skip their own fallback logic.
 function applyCoordinatePair(location, rawValue) {
   const coordinatePair = extractCoordinatePair(rawValue);
 
@@ -240,6 +310,7 @@ function applyCoordinatePair(location, rawValue) {
   return true;
 }
 
+// Intercepts paste events on the latitude input for a given location.
 function handleLatitudePaste(location, event) {
   const pastedText = event.clipboardData?.getData('text') ?? '';
 
@@ -250,6 +321,8 @@ function handleLatitudePaste(location, event) {
   event.preventDefault();
 }
 
+// Handles typing in the latitude input.  Each keystroke is tested against the
+// coordinate-pair pattern so keyboard-shortcut pastes are also handled.
 function handleLatitudeInput(location, event) {
   const nextValue = event.target.value;
 
@@ -260,7 +333,9 @@ function handleLatitudeInput(location, event) {
   location.latitude = nextValue;
 }
 
-// Address lookup dialog
+// ─── Address Lookup Dialog ────────────────────────────────────────────────────
+// addressDialogLocationId tracks which location card opened the dialog so the
+// selected address is written to the correct entry in form.locations.
 const addressDialog = ref(null);
 const addressDialogLocationId = ref(null);
 
@@ -269,6 +344,7 @@ function openAddressDialog(location) {
   addressDialog.value.open();
 }
 
+// Called when the user selects a geocoding result inside AddressLookupDialog.
 function onAddressSelect({ latitude, longitude }) {
   const location = form.locations.find((l) => l.id === addressDialogLocationId.value);
 
@@ -278,15 +354,20 @@ function onAddressSelect({ latitude, longitude }) {
   }
 }
 
+// ─── Location Management ──────────────────────────────────────────────────────
+
 function addLocation() {
   form.locations.push(createLocation(`Relative location ${form.locations.length}`));
 }
 
+// Removes a location by id and ensures the minimum of two locations is kept.
 function removeLocation(id) {
   form.locations = form.locations.filter((location) => location.id !== id);
   ensureMinimumLocations();
 }
 
+// Populates the form with five well-known Boston landmarks so users can
+// immediately see the map in action without typing any coordinates.
 function setExample() {
   const examples = [
     { name: 'Boston Common',   latitude: '42.3551', longitude: '-71.0657' },
@@ -310,6 +391,10 @@ function setExample() {
   ensureMinimumLocations();
 }
 
+// ─── Computed Locations ───────────────────────────────────────────────────────
+// validLocations filters out any row where either coordinate field is empty or
+// non-numeric, so the map never tries to render invalid points.
+
 const validLocations = computed(() => {
   return form.locations
     .map((location, index) => {
@@ -325,6 +410,7 @@ const validLocations = computed(() => {
         name: location.name.trim() || `Location ${index + 1}`,
         latitude,
         longitude,
+        // The first entry in the list is always the primary (centre) location.
         isPrimary: index === 0
       };
     })
@@ -335,16 +421,26 @@ const primaryLocation = computed(() => validLocations.value.find((location) => l
 
 const relativeLocations = computed(() => validLocations.value.filter((location) => !location.isPrimary));
 
+// ─── Distance Helpers ─────────────────────────────────────────────────────────
+
+// Human-readable distance string: shows metres below 1 km, km above.
 function formatDistance(distanceMeters) {
   return distanceMeters >= 1000 ? `${(distanceMeters / 1000).toFixed(distanceMeters % 1000 === 0 ? 0 : 1)} km` : `${distanceMeters} m`;
 }
 
+// Uses Leaflet's built-in Haversine calculation for a great-circle distance.
 function getDistanceInMeters(fromLocation, toLocation) {
   return L.latLng(fromLocation.latitude, fromLocation.longitude).distanceTo(
     L.latLng(toLocation.latitude, toLocation.longitude)
   );
 }
 
+// ─── Map Rendering ────────────────────────────────────────────────────────────
+// Redraws the entire feature layer whenever validLocations, distanceIncrement,
+// or ring colours change.  The ring count is calculated dynamically: the rings
+// are drawn out to whichever is further — the most-distant relative location or
+// three rings — so there is always a meaningful sense of scale even with only
+// one location entered.
 function updateMap() {
   if (!map || !mapFeatures) {
     return;
@@ -373,11 +469,15 @@ function updateMap() {
     .addTo(mapFeatures);
 
   const increment = Number(form.distanceIncrementMeters);
+  // Ensure rings extend at least to the furthest relative location, or three
+  // rings minimum so the scale is always visible.
   const maxDistance = relativeLocations.value.reduce((furthestDistance, location) => {
     return Math.max(furthestDistance, getDistanceInMeters(primary, location));
   }, increment * 3);
   const circleCount = Math.max(1, Math.ceil(maxDistance / increment));
   const outerRingRadius = increment * circleCount;
+  // toBounds(diameter) returns a LatLngBounds square centred on the primary
+  // point that covers the outermost ring; used for the initial viewport fit.
   const outerRingBounds = L.latLng(primary.latitude, primary.longitude).toBounds(outerRingRadius * 2);
   const oddRingStyle = parseRingColor(form.ringColors.odd, '#8ecae699');
   const evenRingStyle = parseRingColor(form.ringColors.even, '#f7c873bf');
@@ -391,6 +491,7 @@ function updateMap() {
       radius,
       color: ringStyle.color,
       opacity: ringStyle.opacity,
+      // The outermost ring gets a slightly heavier dashed border to mark the edge.
       weight: index === circleCount ? 2.5 : 2,
       dashArray: index === circleCount ? '12 8' : '6 6',
       fillColor: ringStyle.color,
@@ -399,6 +500,8 @@ function updateMap() {
       .addTo(mapFeatures);
   }
 
+  // Render each relative location as a house marker with a dashed line back to
+  // the primary point and a tooltip showing the name and straight-line distance.
   relativeLocations.value.forEach((location) => {
     const point = [location.latitude, location.longitude];
 
@@ -423,12 +526,16 @@ function updateMap() {
     return;
   }
 
+  // Expand the bounds to include the outer ring so the rings are never clipped
+  // by the viewport even when all relative locations are close to the primary.
   const combinedBounds = L.latLngBounds(bounds);
 
   combinedBounds.extend(outerRingBounds);
   map.fitBounds(combinedBounds, { padding: [40, 40] });
 }
 
+// Called after expand/collapse transitions that change the map container size.
+// invalidateSize() tells Leaflet to remeasure the container and redraw tiles.
 function syncMapSize() {
   if (!map) {
     return;
@@ -448,6 +555,8 @@ function toggleFormVisible() {
   isFormVisible.value = !isFormVisible.value;
 }
 
+// ─── Lifecycle Hooks ──────────────────────────────────────────────────────────
+
 onMounted(() => {
   map = L.map(mapElement.value, {
     zoomControl: true,
@@ -465,22 +574,44 @@ onBeforeUnmount(() => {
     clearTimeout(routeUpdateTimeout);
   }
 
+  // Remove the Leaflet instance to prevent memory leaks on navigation.
   if (map) {
     map.remove();
   }
 });
 
+// ─── Reactive Watchers ────────────────────────────────────────────────────────
+
 watch(validLocations, updateMap, { deep: true });
 watch(() => form.distanceIncrementMeters, updateMap);
 watch(() => [form.ringColors.odd, form.ringColors.even], updateMap);
+// Re-measure the map canvas whenever its container size changes.
 watch(isMapExpanded, syncMapSize);
 watch(isFormVisible, syncMapSize);
+
+// ─── URL / localStorage State Sync ───────────────────────────────────────────
+// Two-way synchronisation between the form state and the URL query parameter:
+//
+//  • Outbound (form → URL): whenever serializeFormState() changes, the URL is
+//    updated via router.replace() after a 150 ms debounce.  The state is also
+//    written to localStorage so reloading without a URL parameter restores the
+//    last session.
+//
+//  • Inbound (URL → form): if route.query.state changes (e.g. browser back/
+//    forward, or the page is opened with a shared URL), the form is updated to
+//    match.  When there is no URL parameter the stored localStorage value is
+//    used as a fallback.
+//
+// isApplyingRouteState guards against the inbound handler triggering an outbound
+// URL update, which would create a feedback loop.
 
 watch(
   () => route.query.state,
   (serializedState) => {
     const nextSerializedState = typeof serializedState === 'string' ? serializedState : readStoredState();
 
+    // Skip if the URL state already matches what's in the form to avoid
+    // resetting cursor positions or triggering unnecessary re-renders.
     if (nextSerializedState === serializeFormState()) {
       return;
     }
@@ -501,6 +632,7 @@ watch(
       return;
     }
 
+    // Debounce URL updates so every keystroke doesn't create a history entry.
     if (routeUpdateTimeout) {
       clearTimeout(routeUpdateTimeout);
     }
