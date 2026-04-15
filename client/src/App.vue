@@ -1,4 +1,9 @@
 <script setup>
+// ─── App Shell ────────────────────────────────────────────────────────────────
+// Top-level layout component.  It renders a persistent header with a tab bar
+// for navigating between demos, and a <RouterView> placeholder where the active
+// page component is mounted.  New demos can be added by appending an entry to
+// the tabs array (the router/index.js route list must be updated in parallel).
 const tabs = [
   {
     name: 'Drive Time',
