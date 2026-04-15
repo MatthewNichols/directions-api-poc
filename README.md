@@ -57,6 +57,8 @@ Fill in the keys:
 `server/.env`
 ```env
 ORS_API_KEY=your_openrouteservice_api_key_here
+MAPTILER_API_KEY=your_maptiler_api_key_here
+GEO_LOOKUP_COUNTRY=US
 PORT=3001
 ```
 
